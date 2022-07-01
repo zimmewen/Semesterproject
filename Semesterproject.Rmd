@@ -21,8 +21,8 @@ library(lubridate)
 library(ggplot2)
 library(udunits2)
 library(sf)
-library(tmap)
-library(leaflet)
+library(rosm)
+library(ggspatial)
 library(patchwork)
 
 ```
@@ -45,10 +45,10 @@ Mit den gegebenen Daten soll nachfolgend explorativ und statistisch versucht wer
 
 Für die folgenden Analysen wurde mit Daten gearbeitet, welche von der Kursleitung unter [CMA Github](https://computationalmovementanalysis.github.io/ComputationalMovementAnalysisData/index.html) zur Verfügung gestellt wurden.
 
-Im **Wildschwein**-Datensatz befinden sich die Positionen von 19 verschiedenen Individuen, aufgenommen im Zeitraum Mai 2014 bis Oktober 2016 im Studiengebiet Bern. Für jeden Fixpunkt der rund 300'000 Beobachtungen wurden der *Names des Tieres*, seine *Koordinaten*, sowie der *Zeitstempel* verwendet, übrige Attribute wurden entfernt.
+Im **Wildschwein**-Datensatz befinden sich die Positionen von 19 verschiedenen Individuen, aufgenommen im Zeitraum Mai 2014 bis Oktober 2016 im Studiengebiet Bern. Für jeden Fixpunkt der rund 300'000 Beobachtungen wurden der Names des Tieres, seine Koordinaten, sowie der Zeitstempel verwendet, übrige Attribute wurden entfernt.
 
-```{r}
-# Lade Daten
+```{r, cols.print=4, rows.print=3}
+
 wildschwein  <- wildschwein_BE
 
 # Wähle nur relevante Spalten
@@ -59,21 +59,26 @@ wildschwein <- st_as_sf(wildschwein,
                   coords = c("E", "N"), 
                   crs = 2056,
                   remove = FALSE)
+
+wildschwein #Tabelle für html-Export
+
 ```
 
-```{r, echo=FALSE, cols.print=4, rows.print=3, fig.height=4, fig.width=5}
+```{r, echo=FALSE, fig.align='center', fig.height=6, fig.width=6}
 
-wildschwein #reicht aus um als Tabelle anzuzeigen (in html-options oben definiert)
-
-tmap_mode("view")+
-tm_shape(wildschwein)+
-  tm_dots("TierName", alpha = 0.5)
+ggplot() +
+  annotation_map_tile("osm", zoom = 15, alpha = 0.5, progress = "none") +
+  geom_sf(wildschwein, mapping = aes(color = TierName, alpha = 0.8)) +
+  coord_sf(datum = 2056) +
+  labs(title = "Positionen der Wildschweine") +
+  theme(legend.position = "none",
+        title = element_text(size=10))
 
 ```
 
 Für die **Wildschweinschrecke** (WSS) stehen zwei Datensätze bereit, je einer zu den Standorten sowie den Daten zur Laufzeit, nebst einiger Metadaten. Beide Datensätze wurden zu Beginn der Arbeit vereint und um die nicht benötigten Attribute reduziert. Die für die Analyse genutzten sind vor allem die *ID*, *Koordinaten* sowie das *Datum*, an dem der WSS an- und ausgeschaltet wurde.
 
-```{r, cols.print=4, rows.print=3, fig.height=4, fig.width=5}
+```{r, cols.print=4, rows.print=3}
 
 schreck_locations <- schreck_locations
 schreck_agenda <- schreck_agenda
@@ -84,6 +89,9 @@ schreck <- left_join(schreck_locations, schreck_agenda, by = "id")
 # Wähle nur relevante Spalten
 schreck <- subset(schreck, select = c("id", "region", "lat", "lon", "datum_on", "datum_off"))
 
+# Filter auf Untersuchungsgebiet
+schreck <- subset(schreck, region == "fanel")
+
 # Überschreiben als sf-Objekt
 schreck <- st_as_sf(schreck,
                     coords = c("lon", "lat"),
@@ -91,16 +99,21 @@ schreck <- st_as_sf(schreck,
                     remove = FALSE)
 
 schreck <- st_transform(schreck, 2056)
+
+schreck #Tabelle für html-Output
+
 ```
 
-```{r, echo=FALSE, cols.print=4, rows.print=3, fig.height=4, fig.width=5}
+```{r, echo=FALSE, fig.align='center', fig.height=6, fig.width=6}
 
-schreck #reicht aus um als Tabelle anzuzeigen (in html-options oben definiert)
-
-leaflet() %>%
-  addProviderTiles(providers$CartoDB.Positron) %>%
-  addCircles(data = schreck, lng = ~lon, lat = ~lat) %>%
-  setView(lng = 7.08, lat = 46.996, zoom = 12)
+ggplot() +
+  annotation_map_tile("osm", zoom = 14, alpha = 0.5, progress = "none") +
+  geom_sf(schreck, mapping = aes(color = id, size = 3, alpha = 0.8)) +
+  coord_sf(datum = 2056) +
+  theme(legend.position = "none") +
+  labs(title = "Positionen der Wildschweinschrecke") +
+  theme(legend.position = "none",
+        title = element_text(size=10))
 
 ```
 
@@ -110,10 +123,7 @@ Ein erster räumlicher Überblick zeigte, dass alle WSS des Forschungsprojekts i
 
 Zudem galt es herauszufinden, wann eine zeitliche Überschneidung der Laufzeiten der WSS mit den Aufnahmezeiten der Wildschweine stattfand. Jene WSS aus dem Jahr 2017 konnten gänzlich ausgeschlossen werden. Da für die weitere Analyse das Verhalten der Tiere auch vor und nach eigentlicher WSS-Laufzeit interessant war, lag unser Fokus auf jenen, die eine genügend lange Überschneidung zeigten. Es entfielen somit weitere WSS aus den Jahren 2014 und 2016 sowie einzelne Wildschweine.
 
-```{r, fig.keep='last', fig.height=4, fig.width=5}
-
-# Filter auf Untersuchungsgebiet
-schreck <- subset(schreck, region == "fanel")
+```{r, fig.keep='last', fig.align='center', fig.height=6, fig.width=6}
 
 # Laufzeiten Wildschreck
 schreck_duration <- schreck %>%
@@ -153,10 +163,12 @@ wildschwein_duration <- subset(wildschwein_duration, TierName!="Amos" & TierName
 ggplot()+
   geom_errorbarh(wildschwein_duration, mapping = aes(xmin = min, xmax = max, y = TierName))+
   geom_errorbarh(schreck_duration, mapping = aes(xmin = min, xmax = max, y = id))+
-  labs(y = "")+
-  theme_minimal()
+  labs(title = "Lauf- und Aufnahmezeiten", y = "") +
+  theme(legend.position = "none",
+        title = element_text(size=10))
 
 ```
+
 
 Bei den übrigen Wildschweinen erfolgte schliesslich eine Zuweisung der aufgezeichneten WSS-Datenzeitpunkte in Perioden *vorher*, *während* und *nachher*. Hierbei wurde die effektive Laufzeit der WSS in Tagen oder Wochen und die gleiche Zeitdauer vor und nach dessen Laufzeit herausgefiltert. Dieses Vorgehen diente dazu, die Reaktion bzw. das Verhaltensmuster der Wildschweine vor, während und nach der Laufzeit der WSS miteinander zu vergleichen.
 
@@ -188,7 +200,7 @@ rm(filter_WSS_2015_001)
 
 # Zeitdauer filtern und Zuweisung der Perioden
 WSS_2015_01_besendert <- wildschwein %>%
- filter(Datum > "2015-04-08" & Datum < "2015-08-12") %>% #Laufzeit plus gleiche Zeitdauer vorher und nachher
+ filter(Datum > "2015-04-08" & Datum < "2015-08-12") %>%
   mutate(Period = compare_time(Datum, "2015-05-20", "2015-07-01"))
 
 
@@ -207,7 +219,7 @@ rm(filter_WSS_2015_03)
 
 # Zeitdauer filtern und Zuweisung der Perioden
 WSS_2015_03_besendert <- wildschwein %>%
- filter(Datum > "2015-04-12" & Datum < "2015-08-10") %>% #Laufzeit plus gleiche Zeitdauer vorher und nachher
+ filter(Datum > "2015-04-12" & Datum < "2015-08-10") %>%
   mutate(Period = compare_time(Datum, "2015-05-22", "2015-07-01"))
 
 
@@ -226,7 +238,7 @@ rm(filter_WSS_2015_04)
 
 # Zeitdauer filtern und Zuweisung der Perioden
 WSS_2015_04_besendert <- wildschwein %>%
- filter(Datum > "2015-04-22" & Datum < "2015-08-05") %>% #Laufzeit plus vorher und nachher
+ filter(Datum > "2015-04-22" & Datum < "2015-08-05") %>%
   mutate(Period = compare_time(Datum, "2015-05-27", "2015-07-01"))
 
 
@@ -245,7 +257,7 @@ rm(filter_WSS_2016_01)
 
 # Zeitdauer filtern und Zuweisung der Perioden
 WSS_2016_01_besendert <- wildschwein %>%
- filter(Datum > "2016-03-16" & Datum < "2016-05-12") %>% #Laufzeit plus gleiche Zeitdauer vorher und nachher
+ filter(Datum > "2016-03-16" & Datum < "2016-05-12") %>%
   mutate(Period = compare_time(Datum, "2016-04-04", "2016-04-23"))
 
 
@@ -264,7 +276,7 @@ rm(filter_WSS_2016_05)
 
 # Zeitdauer filtern und Zuweisung der Perioden
 WSS_2016_05_besendert <- wildschwein %>%
- filter(Datum > "2016-05-16" & Datum < "2016-08-14") %>% #Laufzeit plus gleiche Zeitdauer vorher und nachher
+ filter(Datum > "2016-05-16" & Datum < "2016-08-14") %>%
   mutate(Period = compare_time(Datum, "2016-06-15", "2016-07-15"))
 
 
@@ -283,7 +295,7 @@ rm(filter_WSS_2016_06)
 
 # Zeitdauer filtern und Zuweisung der Perioden
 WSS_2016_06_besendert <- wildschwein %>%
- filter(Datum > "2016-05-16" & Datum < "2016-08-14") %>% #Laufzeit plus gleiche Zeitdauer vorher und nachher
+ filter(Datum > "2016-05-16" & Datum < "2016-08-14") %>%
   mutate(Period = compare_time(Datum, "2016-06-15", "2016-07-15"))
 
 ```
@@ -292,7 +304,7 @@ Im Rahmen der explorativen Datenanalyse haben wir ausserdem diverse Bewegungspar
 
 Schwarzwild verbringt einen Grossteil des Tages ruhend. Sind sie gezwungen zu flüchten, erreichen sie zwar durchaus Geschwindigkeiten von etwa 40 km/h, allerdings halten sie dies nicht lange aufrecht und fallen nach kurzer Zeit in einen Trab mit 6 bis maximal 10km/h zurück. (Morelle et al. 2015) Das Aufnahmeintervall von 15 Minuten deckt diese kurze Fluchtreaktion somit ungenügend ab und ein etwaiger Effekt lässt sich in den Daten nicht ablesen. Der Ansatz wurde daher nicht weiterverfolgt.
 
-```{r, fig.height=4, fig.width=5}
+```{r, fig.keep='none'}
 
 # Berechne zeitliche Verzögerung zwischen Aufnahmen
 wildschwein <- wildschwein %>%
@@ -321,28 +333,102 @@ wildschwein_multipoint <-  summarise(wildschwein_group)
 # Rechne Convex Hull pro Tier
 wildschwein_homerange <- st_convex_hull(wildschwein_multipoint)
 
-tmap_mode("view")+ 
-tm_shape(wildschwein_homerange)+
-  tm_polygons("TierName", alpha = 0.5, title ="")
+rm(wildschwein_group)
+rm(wildschwein_multipoint)
+
+
+# Trajektorien
+
+# Segmentation
+# Sampling Intervall 15 Minuten --> Zeitfenster 60 Minuten
+wildschwein_traj <- wildschwein %>%
+  mutate(
+    nMinus2 = sqrt((lag(E,2)-E)^2+(lag(N,2)-N)^2),   # distance to pos -30 minutes
+    nMinus1 = sqrt((lag(E,1)-E)^2+(lag(N,1)-N)^2),   # distance to pos -15 minutes
+    nPlus1  = sqrt((E-lead(E,1))^2+(N-lead(N,1))^2), # distance to pos +15 mintues
+    nPlus2  = sqrt((E-lead(E,2))^2+(N-lead(N,2))^2)  # distance to pos +30 minutes
+  )
+
+# Berechne stepMean für jeden Punkt in Zeitfenster
+wildschwein_traj <- wildschwein_traj %>%
+  group_by(TierName) %>%
+  rowwise() %>%
+  mutate(stepMean = mean(c(nMinus2, nMinus1, nPlus1, nPlus2))) %>%
+  ungroup()
+
+# Betrachte stepMean um Threshold zu finden
+summary(wildschwein_traj$stepMean) #Mean 50.576
+
+ggplot(wildschwein_traj, aes(x=stepMean)) +         
+  geom_histogram() +
+  scale_x_continuous(limits = c(0,1000)) +
+  scale_y_continuous(limits = c(0,9000))
+
+# Entferne statische Werte
+wildschwein_traj <- wildschwein_traj %>%
+  mutate(static = stepMean < mean(stepMean, na.rm = TRUE))
+
+ggplot(wildschwein_traj, aes(E, N, color = static)) +
+  geom_path() +
+  geom_point() +
+  coord_sf(datum = 2056)
+
+# Weise Segment ID zu um diese zur Gruppierung zu nutzen
+rle_id <- function(vec){
+  x <- rle(vec)$lengths
+  as.factor(rep(seq_along(x), times = x))
+}
+
+wildschwein_traj <- wildschwein_traj %>%
+  mutate(segment_id = rle_id(static))
+
+# Visualisiere Segmente, die sich bewegen mittels Segment ID
+wildschwein_traj_filter <- wildschwein_traj %>%
+  filter(static == FALSE)
+  
+ggplot(wildschwein_traj_filter, aes(E, N, color = TierName)) +
+  geom_path() +
+  geom_point() +
+  coord_sf(datum = 2056) +
+  labs(title = "Alle Bewegungs-Segmente ungefiltert")
+
+# Nutze segment_ID um Dauer zu bestimmen und zu kurze Segmente zu entfernen
+wildschwein_traj_move <- wildschwein_traj_filter %>%
+  group_by(TierName, segment_id) %>%
+  mutate(duration = max(DatetimeUTC)-min(DatetimeUTC)) %>% #berechne Dauer der Bewegung
+  filter(duration > 21600) #entferne alle Segmente mit Bewegung < 6 Stunden
 
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.align='center', fig.height=6, fig.width=6}
+
+ggplot() +
+  annotation_map_tile("osm", zoom = 14, alpha = 0.5, progress = "none") +
+  geom_sf(wildschwein_homerange, mapping = aes(color = TierName, alpha = 0.8)) +
+  coord_sf(datum = 2056) +
+  theme(legend.position = "bottom",
+        title = element_text(size = 10)) +
+  labs(title = "Homeranges der Wildschweine", color = "") +
+  guides(alpha = "none")
+
+```
+
+```{r, echo=FALSE, fig.align='center', fig.height=6, fig.width=6}
 
 # Trajektorien
-ggplot()+
-  geom_path(wildschwein, mapping=aes(E, N, color = TierName))+
-  geom_point(wildschwein, mapping=aes(E, N, color = TierName))+
-  coord_sf(datum = 2056)+
-  facet_wrap(~TierName)+
-  labs(x = "", y = "")+
+ggplot(wildschwein_traj_move, mapping = aes(E, N, color = TierName)) +
+  geom_path() +
+  geom_point() +
+  coord_sf(datum = 2056) +
+  labs(title = "Trajektorien der Wildschweine (Seg.dauer > 6h)", x = "", y = "") +
   theme(legend.position="none",
+        title = element_text(size = 10),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank() 
-        )
-# Achtung: Ausreisser bleiben unberücksichtigt
+        ) +
+  facet_wrap(~TierName)
 
 ```
 
@@ -352,21 +438,26 @@ Beim Einsatz von akustischen Geräten wie dem Wildschweinschreck ist darauf zu a
 
 In der Schreck-Agenda wird die Lautstärke je WSS in Prozent des maximalen Wertes angegeben, wobei die niedrigste Lautstärke 25 % von 120dB beträgt. Wenn wir von einer Linearen Abnahme der Lautstärke auf zunehmende Distanz ausgehen, beträgt die Reichweite mit 30dB noch 250m. Um einen Effekt über alle Lautstärken nachweisen zu können, haben wir uns für einen Radius von 200m um den WSS entschieden. Es wird somit davon ausgegangen, dass der WSS auf eine Distanz von 200m von den Wildschweinen für alle Lautstärken noch gut hörbar ist und Individuen, die sich innerhalb dieses Radius befinden, eine Reaktion zeigen.
 
-Die WSS_2016_06 und WSS_2015_04 liegen sehr dicht beieinander, ihre Radien überschneiden sich. Da sie jedoch zu unterschiedlichen Zeiten liefen, braucht es in der weiteren Analyse nicht berücksichtigt werden. Der Radius um den WSS_2016_06 erwies sich als leer (keine Wildschweine in unmittelbarer Nähe) innerhalb der Laufzeit, somit wurde dieser in weitere Analysen nicht miteinbezogen.
+Die WSS_2016_06 und WSS_2015_04 liegen sehr dicht beieinander, ihre Radien überschneiden sich. Da sie jedoch zu unterschiedlichen Zeiten liefen, braucht es in der weiteren Analyse nicht berücksichtigt werden.
 
-Anschliessend haben wir ermittelt, welche Wildschweine sich vor, während und nach der Laufzeit innerhalb des gewählten Radius aufgehalten haben. Danach wurde anhand des Zeitstempels ermittelt, welche Positionspunkte in welche Periode fallen und diese entsprechend zugeordnet. 
+Anschliessend haben wir ermittelt, welche Wildschweine sich vor, während und nach der Laufzeit innerhalb des gewählten Radius aufgehalten haben. Danach wurde anhand des Zeitstempels ermittelt, welche Positionspunkte in welche Periode fallen und diese entsprechend zugeordnet.
 
-```{r, fig.height=4, fig.width=5}
+```{r, fig.align='center', fig.height=6, fig.width=6}
+
+# Füge alle besenderten Wildschwein zu Schrecklaufzeiten zusammen
+WSS_all_besendert <- bind_rows(WSS_2015_01_besendert, WSS_2015_03_besendert, WSS_2015_04_besendert, WSS_2016_01_besendert, WSS_2016_05_besendert, WSS_2016_06_besendert)
+
 
 # Buffer von 200m um einzelne Schrecke
 schreck_200buffer <- st_buffer(schreck, 200)
+
 
 # Buffer um Schreck WSS_2015_01
 WSS_2015_01_buffer <- schreck_200buffer %>%
   filter(id == "WSS_2015_01")
 
 # Verschneide zuvor gewählte Wildschweine in Schreck-Laufzeit mit Buffer
-WSS_2015_01_besendert_buffer <- st_intersection(WSS_2015_01_besendert, WSS_2015_01_buffer)
+WSS_2015_01_besendert_buffer <- st_intersection(WSS_all_besendert, WSS_2015_01_buffer)
 
 
 # Buffer um Schreck WSS_2015_03
@@ -374,7 +465,7 @@ WSS_2015_03_buffer <- schreck_200buffer %>%
   filter(id == "WSS_2015_03")
 
 # Verschneide zuvor gewählte Wildschweine in Schreck-Laufzeit mit Buffer
-WSS_2015_03_besendert_buffer <- st_intersection(WSS_2015_03_besendert, WSS_2015_03_buffer)
+WSS_2015_03_besendert_buffer <- st_intersection(WSS_all_besendert, WSS_2015_03_buffer)
 
 
 # Buffer um Schreck WSS_2015_04
@@ -382,7 +473,7 @@ WSS_2015_04_buffer <- schreck_200buffer %>%
   filter(id == "WSS_2015_04")
 
 # Verschneide zuvor gewählte Wildschweine in Schreck-Laufzeit mit Buffer
-WSS_2015_04_besendert_buffer <- st_intersection(WSS_2015_04_besendert, WSS_2015_04_buffer)
+WSS_2015_04_besendert_buffer <- st_intersection(WSS_all_besendert, WSS_2015_04_buffer)
 
 
 # Buffer um Schreck WSS_2016_01
@@ -390,7 +481,7 @@ WSS_2016_01_buffer <- schreck_200buffer %>%
   filter(id == "WSS_2016_01")
 
 # Verschneide zuvor gewählte Wildschweine in Schreck-Laufzeit mit Buffer
-WSS_2016_01_besendert_buffer <- st_intersection(WSS_2016_01_besendert, WSS_2016_01_buffer)
+WSS_2016_01_besendert_buffer <- st_intersection(WSS_all_besendert, WSS_2016_01_buffer)
 
 
 # Buffer um Schreck WSS_2016_05
@@ -398,7 +489,7 @@ WSS_2016_05_buffer <- schreck_200buffer %>%
   filter(id == "WSS_2016_05")
 
 # Verschneide zuvor gewählte Wildschweine in Schreck-Laufzeit mit Buffer
-WSS_2016_05_besendert_buffer <- st_intersection(WSS_2016_05_besendert, WSS_2016_05_buffer)
+WSS_2016_05_besendert_buffer <- st_intersection(WSS_all_besendert, WSS_2016_05_buffer)
 
 
 # Buffer um Schreck WSS_2016_06
@@ -406,15 +497,19 @@ WSS_2016_06_buffer <- schreck_200buffer %>%
   filter(id == "WSS_2016_06")
 
 # Verschneide zuvor gewählte Wildschweine in Schreck-Laufzeit mit Buffer
-WSS_2016_06_besendert_buffer <- st_intersection(WSS_2016_06_besendert, WSS_2016_06_buffer)
-# leer, weil effektiv keine Tier während Laufzeit im Buffer
-# wenn andere Buffergrösse nochmal schauen, ansonsten brauch dieser Schreck nicht weiter verwendet werden
+WSS_2016_06_besendert_buffer <- st_intersection(WSS_all_besendert, WSS_2016_06_buffer)
 
-leaflet() %>%
-  addProviderTiles(providers$CartoDB.Positron) %>%
-  addCircles(data = schreck, lng = ~lon, lat = ~lat) %>%
-  addCircles(data = schreck_200buffer, lng = ~lon, lat = ~lat, radius = ~200) %>%
-  setView(lng = 7.08, lat = 46.996, zoom = 12)
+
+ggplot() +
+  annotation_map_tile("osm", zoom = 13, alpha = 0.5, progress = "none") +
+  geom_sf(schreck_200buffer, mapping = aes(color = id)) +
+  geom_sf(schreck, mapping = aes(color = id, size = 3, alpha = 0.8)) +
+  coord_sf(datum = 2056) +
+  theme(legend.position = "bottom",
+        title = element_text(size = 10)) +
+  labs(title = "Ausgewählte Wildschweinschrecke mit Radius 200m", color = "") +
+  guides(alpha = "none", size = "none")
+
 
 ```
 
@@ -442,8 +537,8 @@ rm(wildschwein_WSS_2015_01_duration_days)
 # Aufenthaltsdauer in Stunden (gerundet)
 
 # Neue Spalte mit Eigenschaft ob im Buffer oder ausserhalb
-WSS_2015_01_besendert <- WSS_2015_01_besendert %>%
-  mutate(im_buff = st_intersects(WSS_2015_01_besendert, WSS_2015_01_buffer, sparse = FALSE)[,1])
+WSS_2015_01_besendert <- WSS_all_besendert %>%
+  mutate(im_buff = st_intersects(WSS_all_besendert, WSS_2015_01_buffer, sparse = FALSE)[,1])
 
 wildschwein_WSS_2015_01_duration <-
   WSS_2015_01_besendert %>%
@@ -456,8 +551,8 @@ wildschwein_WSS_2015_01_duration <-
   mutate(dauer = as.numeric(difftime(geht_raus, geht_rein, units = "hours")))
 
 
-WSS_2015_03_besendert <- WSS_2015_03_besendert %>%
-  mutate(im_buff = st_intersects(WSS_2015_03_besendert, WSS_2015_03_buffer, sparse = FALSE)[,1])
+WSS_2015_03_besendert <- WSS_all_besendert %>%
+  mutate(im_buff = st_intersects(WSS_all_besendert, WSS_2015_03_buffer, sparse = FALSE)[,1])
 
 wildschwein_WSS_2015_03_duration <-
   WSS_2015_03_besendert %>%
@@ -470,8 +565,8 @@ wildschwein_WSS_2015_03_duration <-
   mutate(dauer = as.numeric(difftime(geht_raus, geht_rein, units = "hours")))
 
 
-WSS_2015_04_besendert <- WSS_2015_04_besendert %>%
-  mutate(im_buff = st_intersects(WSS_2015_04_besendert, WSS_2015_04_buffer, sparse = FALSE)[,1])
+WSS_2015_04_besendert <- WSS_all_besendert %>%
+  mutate(im_buff = st_intersects(WSS_all_besendert, WSS_2015_04_buffer, sparse = FALSE)[,1])
 
 wildschwein_WSS_2015_04_duration <-
   WSS_2015_04_besendert %>%
@@ -484,8 +579,8 @@ wildschwein_WSS_2015_04_duration <-
   mutate(dauer = as.numeric(difftime(geht_raus, geht_rein, units = "hours")))
 
 
-WSS_2016_01_besendert <- WSS_2016_01_besendert %>%
-  mutate(im_buff = st_intersects(WSS_2016_01_besendert, WSS_2016_01_buffer, sparse = FALSE)[,1])
+WSS_2016_01_besendert <- WSS_all_besendert %>%
+  mutate(im_buff = st_intersects(WSS_all_besendert, WSS_2016_01_buffer, sparse = FALSE)[,1])
 
 wildschwein_WSS_2016_01_duration <-
   WSS_2016_01_besendert %>%
@@ -498,8 +593,8 @@ wildschwein_WSS_2016_01_duration <-
   mutate(dauer = as.numeric(difftime(geht_raus, geht_rein, units = "hours")))
 
 
-WSS_2016_05_besendert <- WSS_2016_05_besendert %>%
-  mutate(im_buff = st_intersects(WSS_2016_05_besendert, WSS_2016_05_buffer, sparse = FALSE)[,1])
+WSS_2016_05_besendert <- WSS_all_besendert %>%
+  mutate(im_buff = st_intersects(WSS_all_besendert, WSS_2016_05_buffer, sparse = FALSE)[,1])
 
 wildschwein_WSS_2016_05_duration <-
   WSS_2016_05_besendert %>%
@@ -511,6 +606,21 @@ wildschwein_WSS_2016_05_duration <-
   summarise(geht_rein = min(DatetimeUTC), geht_raus = max(DatetimeUTC)) %>%
   mutate(dauer = as.numeric(difftime(geht_raus, geht_rein, units = "hours")))
 
+
+WSS_2016_06_besendert <- WSS_all_besendert %>%
+  mutate(im_buff = st_intersects(WSS_all_besendert, WSS_2016_06_buffer, sparse = FALSE)[,1])
+
+wildschwein_WSS_2016_06_duration <-
+  WSS_2016_06_besendert %>%
+  st_drop_geometry() %>%
+  group_by(TierName) %>%
+  mutate(segment = rle_id(im_buff)) %>%
+  filter(im_buff=TRUE) %>%
+  group_by(TierName, segment, Period) %>%
+  summarise(geht_rein = min(DatetimeUTC), geht_raus = max(DatetimeUTC)) %>%
+  mutate(dauer = as.numeric(difftime(geht_raus, geht_rein, units = "hours")))
+
+
 ```
 
 ### Statistische Analyse
@@ -519,7 +629,7 @@ Die Aufenthaltsdauer der Wildschweine in den drei unterschiedlichen Laufzeit-Per
 
 Hierbei wurden zunächst die Voraussetzungen zur Durchführung einer ANOVA mittels explorativer Datenanalyse ermittelt (Normalverteilung, Varianzhomogenität) und falls notwendig eine Transformation der Daten vorgenommen.
 
-Verglichen wurde die Aufenthaltsdauer aller Tiere bei den einzelnen WSS, anschliessend die Aufenthaltsdauer zwischen den unterschiedlichen Perioden über alle WSS und schliesslich die Aufenthaltsdauer pro Individuum über sämtliche WSS. Die Individuen Donar, Franz, Joanna, Rosa und Venus wurden dabei wegen zu kleiner Stichproben (n < 15) nicht berücksichtigt.
+Verglichen wurde die Aufenthaltsdauer aller Tiere bei den einzelnen WSS, anschliessend die Aufenthaltsdauer zwischen den unterschiedlichen Perioden über alle WSS und schliesslich die Aufenthaltsdauer pro Individuum über sämtliche WSS. Die Individuen Donar, Franz, Joanna, Rosa und Venus wurden dabei wegen zu kleiner Stichproben (n \< 15) nicht berücksichtigt.
 
 ```{r, fig.keep='none'}
 
@@ -717,10 +827,35 @@ ggplot(wildschwein_WSS_2016_05_duration, aes(x = Period, y= dauer)) +
 
 
 
+# Explorative Datenanalyse für WSS_2016_06
+
+# Null-Werte mit NA ersetzen
+wildschwein_WSS_2016_06_duration$dauer[wildschwein_WSS_2016_06_duration$dauer == 0] <- NA 
+
+# Perioden nach Rängen ordnen
+wildschwein_WSS_2016_06_duration$Period <- factor(wildschwein_WSS_2016_06_duration$Period,ordered = T,levels = c("vorher","während","nachher"))
+
+# Boxplot
+ggplot(wildschwein_WSS_2016_06_duration, aes(x = Period, y= dauer)) +
+  geom_boxplot(fill = "white", color = "black", size = 1) + 
+  labs(x="Periode", y="Aufenthaltsdauer", title = "WSS_2016_06")
+
+# ...
+
+# Logarithmus-Transformation
+# Boxplot
+ggplot(wildschwein_WSS_2016_06_duration, aes(x = Period, y= dauer)) +
+  geom_boxplot(fill = "white", color = "black", size = 1) +
+  scale_y_log10() +
+  labs(x="Periode", y="Aufenthaltsdauer (log10-Transformation)", title = "WSS_2016_06")
+
+
+
+
 # Explorative Datenanalyse für alle Schrecks zusammen
 
 # Datensätze zusammenfügen
-wildschwein_WSS_all_duration <- bind_rows(wildschwein_WSS_2015_01_duration, wildschwein_WSS_2015_03_duration, wildschwein_WSS_2015_04_duration,wildschwein_WSS_2016_01_duration, wildschwein_WSS_2016_05_duration)
+wildschwein_WSS_all_duration <- bind_rows(wildschwein_WSS_2015_01_duration, wildschwein_WSS_2015_03_duration, wildschwein_WSS_2015_04_duration,wildschwein_WSS_2016_01_duration, wildschwein_WSS_2016_05_duration, wildschwein_WSS_2016_06_duration)
 
 # Perioden nach Rängen ordnen
 wildschwein_WSS_all_duration$Period <- factor(wildschwein_WSS_all_duration$Period,ordered = T,levels = c("vorher","während","nachher"))
@@ -991,21 +1126,21 @@ ggplot(Ueli_duration, aes(x = Period, y= dauer)) +
 
 ```
 
-```{r, echo=FALSE, fig.height=4, fig.width=5}
+```{r, echo=FALSE, fig.align='center', fig.height=5, fig.width=6}
 
 box_all <- ggplot(wildschwein_WSS_all_duration, aes(x = Period, y= dauer)) +
   geom_boxplot(fill = "white", color = "black", size = 1) +
-  labs(x="", y="")+
-  theme_minimal()
+  labs(x="", y="")
 
 box_all_trans <- ggplot(wildschwein_WSS_all_duration, aes(x = Period, y= dauer)) +
   geom_boxplot(fill = "white", color = "black", size = 1) +
   scale_y_log10() +
-  labs(x="", y="log10-Transformation")+
-  theme_minimal()
+  labs(x="", y="log10-Transformation")
 
-(box_all + box_all_trans)+
-  plot_annotation("Aufenthaltsdauer über alle WSS (exemplarisch)")
+(box_all + box_all_trans) +
+  plot_annotation("Aufenthaltsdauer über alle WSS (exemplarisch)") &
+  theme(plot.tag = element_text(size = 9))
+
 
 ```
 
@@ -1013,13 +1148,14 @@ box_all_trans <- ggplot(wildschwein_WSS_all_duration, aes(x = Period, y= dauer))
 
 #### Anzahl Individuen im Radius
 
-Bei der Ermittlung wie viele Wildschweine sich vor, während und nach der Laufzeit innerhalb des gewählten Radius von 200m um einen WSS aufgehalten haben kann keine eindeutige Aussage getroffen werden. In keinem Radius befinden sich während der Laufzeit deutlich weniger Tiere als vorher oder nachher. Bei zwei von fünf WSS (WSS_2016_01 und WSS_2016_05) zeigen immerhin nach der Laufzeit weniger Datenpunkte. Gleichwohl scheint sich bei zwei anderen WSS (WSS_2015_01 und WSS_2015_03) nachher sogar mehr Schwarzwild in der Nähe aufzuhalten. WSS_2015_04 zeigt ein ebenso uneindeutiges Bild. Diese Ambivalänz zeigt sich auch in der nachfolgenden statistischen Analyse.
+Bei der Ermittlung wie viele Wildschweine sich vor, während und nach der Laufzeit innerhalb des gewählten Radius von 200m um einen WSS aufgehalten haben, zeigt sich ein durchmischtes Bild. In keinem Radius befinden sich während der Laufzeit deutlich weniger Tiere als vorher oder nachher. Bei zwei von fünf WSS (WSS_2016_01 und WSS_2016_05) zeigen immerhin nach der Laufzeit weniger Datenpunkte. Gleichwohl scheint sich bei zwei anderen WSS (WSS_2015_01 und WSS_2015_03) nachher sogar mehr Schwarzwild in der Nähe aufzuhalten. WSS_2015_04 zeigt ein ebenso uneindeutiges Bild. Diese Ambivalänz zeigt sich auch in der nachfolgenden statistischen Analyse.
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.align='center'}
 
 # Visualisierung von  Perioden, in denen sich die Tiere in Buffer-Reichweite befunden haben
 
 # Perioden nach Rängen ordnen
+
 WSS_2015_01_besendert_buffer$Period <- factor(WSS_2015_01_besendert_buffer$Period,ordered = T,levels = c("vorher","während","nachher"))
 
 WSS_2015_03_besendert_buffer$Period <- factor(WSS_2015_03_besendert_buffer$Period,ordered = T,levels = c("vorher","während","nachher"))
@@ -1030,91 +1166,8 @@ WSS_2016_01_besendert_buffer$Period <- factor(WSS_2016_01_besendert_buffer$Perio
 
 WSS_2016_05_besendert_buffer$Period <- factor(WSS_2016_05_besendert_buffer$Period,ordered = T,levels = c("vorher","während","nachher"))
 
+WSS_2016_06_besendert_buffer$Period <- factor(WSS_2016_06_besendert_buffer$Period,ordered = T,levels = c("vorher","während","nachher"))
 
-ggplot()+
-  geom_sf(WSS_2015_01_buffer, mapping = aes())+
-  geom_sf(WSS_2015_01_besendert_buffer, mapping = aes(color = TierName, alpha = 0.3))+
-  geom_sf(schreck %>% filter(id == "WSS_2015_01"), mapping = aes())+
-  coord_sf(datum=2056)+
-  labs(title="WSS_2015_01",
-       color = "")+
-  guides(alpha = "none")+
-  theme(title =element_text(size=8),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank() 
-        )+
-  facet_wrap(~Period)
-
-ggplot()+
-  geom_sf(WSS_2015_03_buffer, mapping = aes())+
-  geom_sf(WSS_2015_03_besendert_buffer, mapping = aes(color = TierName, alpha = 0.3))+
-  geom_sf(schreck %>% filter(id == "WSS_2015_03"), mapping = aes())+
-  coord_sf(datum=2056)+
-  labs(title="WSS_2015_03",
-       color = "")+
-  guides(alpha = "none")+
-  theme(title =element_text(size=8),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank() 
-        )+
-  facet_wrap(~Period)
-
-ggplot()+
-  geom_sf(WSS_2015_04_buffer, mapping = aes())+
-  geom_sf(WSS_2015_04_besendert_buffer, mapping = aes(color = TierName, alpha = 0.3))+
-  geom_sf(schreck %>% filter(id == "WSS_2015_04"), mapping = aes())+
-  coord_sf(datum=2056)+
-  labs(title="WSS_2015_04",
-       color = "")+
-  guides(alpha = "none")+
-  theme(title =element_text(size=8),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank() 
-        )+
-  facet_wrap(~Period)
-
-ggplot()+
-  geom_sf(WSS_2016_01_buffer, mapping = aes())+
-  geom_sf(WSS_2016_01_besendert_buffer, mapping = aes(color = TierName, alpha = 0.3))+
-  geom_sf(schreck %>% filter(id == "WSS_2016_01"), mapping = aes())+
-  coord_sf(datum=2056)+
-  labs(title="WSS_2016_01",
-       color = "")+
-  guides(alpha = "none")+
-  theme(title =element_text(size=8),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank() 
-        )+
-  facet_wrap(~Period)
-
-ggplot()+
-  geom_sf(WSS_2016_05_buffer, mapping = aes())+
-  geom_sf(WSS_2016_05_besendert_buffer, mapping = aes(color = TierName, alpha = 0.3))+
-  geom_sf(schreck %>% filter(id == "WSS_2016_05"), mapping = aes())+
-  coord_sf(datum=2056)+
-  labs(title="WSS_2016_05",
-       color = "")+
-  guides(alpha = "none")+
-  theme(title =element_text(size=8),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank() 
-        )+
-  facet_wrap(~Period)
-
-```
-
-
-```{r}
 
 buffer1 <- ggplot()+
   geom_sf(WSS_2015_01_buffer, mapping = aes())+
@@ -1124,7 +1177,8 @@ buffer1 <- ggplot()+
   labs(title="WSS_2015_01",
        color = "")+
   guides(alpha = "none")+
-  theme(title =element_text(size=8),
+  theme(legend.position = "none",
+        title = element_text(size=10),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.y=element_blank(),
@@ -1140,7 +1194,8 @@ buffer2 <- ggplot()+
   labs(title="WSS_2015_03",
        color = "")+
   guides(alpha = "none")+
-  theme(title =element_text(size=8),
+  theme(legend.position = "none",
+        title =element_text(size=10),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.y=element_blank(),
@@ -1156,7 +1211,8 @@ buffer3 <- ggplot()+
   labs(title="WSS_2015_04",
        color = "")+
   guides(alpha = "none")+
-  theme(title =element_text(size=8),
+  theme(legend.position = "none",
+        title =element_text(size=10),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.y=element_blank(),
@@ -1172,7 +1228,8 @@ buffer4 <- ggplot()+
   labs(title="WSS_2016_01",
        color = "")+
   guides(alpha = "none")+
-  theme(title =element_text(size=8),
+  theme(legend.position = "none",
+        title =element_text(size=10),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.y=element_blank(),
@@ -1188,7 +1245,25 @@ buffer5 <- ggplot()+
   labs(title="WSS_2016_05",
        color = "")+
   guides(alpha = "none")+
-  theme(title =element_text(size=8),
+  theme(legend.position = "none",
+        title =element_text(size=10),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank() 
+        )+
+  facet_wrap(~Period)
+
+buffer6 <- ggplot()+
+  geom_sf(WSS_2016_06_buffer, mapping = aes())+
+  geom_sf(WSS_2016_06_besendert_buffer, mapping = aes(color = TierName, alpha = 0.3))+
+  geom_sf(schreck %>% filter(id == "WSS_2016_06"), mapping = aes())+
+  coord_sf(datum=2056)+
+  labs(title="WSS_2016_06",
+       color = "")+
+  guides(alpha = "none")+
+  theme(legend.position = "none",
+        title =element_text(size=10),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.y=element_blank(),
@@ -1197,61 +1272,32 @@ buffer5 <- ggplot()+
   facet_wrap(~Period)
 
 
-(buffer1 + buffer2 / buffer3 / buffer4 / buffer5)
+(buffer1 / buffer2)
+(buffer3 / buffer4)
+(buffer5 / buffer6)
 
 ```
-
-
-```{r}
-
-
-WSS_all_besendert_buffer <- rbind(WSS_2015_01_besendert_buffer, WSS_2015_03_besendert_buffer, WSS_2015_04_besendert_buffer, WSS_2016_01_besendert_buffer, WSS_2016_05_besendert_buffer)
-
-
-ggplot()+
-  geom_sf(schreck_200buffer, mapping = aes())+
-  geom_sf(WSS_all_besendert_buffer, mapping = aes(color = TierName, alpha = 0.3))+
-  coord_sf(datum=2056)+
-  labs(title="xxx",
-       color = "")+
-  guides(alpha = "none")+
-  theme(title =element_text(size=8),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank() 
-        )+
-  facet_grid(id~Period)
-
-
-
-```
-
-
-
-
-
 
 
 #### Aufenthaltsdauer innerhalb Radius
 
-Betrachtet man die Aufenthaltsdauer der Tiere innerhalb des Radius sieht man, dass sich das Tier Caroline eine vergleichsweise hohe Anzahl Stunden dort aufgehalten hat. Auf sie scheint der WSS nach seiner Laufzeit nur einen minimalen Effekt zu haben. Dies bestätigt auch die nachfolgende statistische Berechnung. Auch fünf weitere Tiere (Miriam, Ruth, Sabine und Ueli) scheinen während der WSS lief keine veränderte Aufenthaltsdauer aufzuweisen. Für das Tier Ruth steht dies im Gegensatz zur ANOVA-Berechnung, bei der ein Unterschied festgestellt wurde. Laut dieser Grafik scheint der WSS eher auf Rosa einen Effekt zu haben, welche sich zumindest in der Peridode nachher gar nicht näher als 200m aufhält.
+Betrachtet man die Aufenthaltsdauer der Tiere innerhalb des Radius, ist klar zu erkennen, dass sich das Tier Caroline vergleichsweise viele Stunden in der Nähe eines Schrecks aufhält. Dass auf sie der WSS keinen Effekt zu haben scheint, bestätigt auch die Statistik. Vier Tiere (Frida, Rosa, Ruth und Sabine) zeigen zumindest eine beeinflusste Aufenthaltsdauer nach der WSS-Laufzeit, Rosa scheint sich gar nicht mehr in der Nähe aufzuhalten. Und die verringerten Stunden von Ruth lassen sich nachfolgend statistisch signifikant belegen. Zwei Tiere (Frida und Miriam) tun dies während WSS-Laufzeit, bei Miriam steigen die Stunden danach allerdings wieder an.
 
-```{r, echo=FALSE, fig.height=4, fig.width=5}
+```{r, echo=FALSE, fig.align='center', fig.height=6, fig.width=6}
 
-plot <- subset(wildschwein_WSS_all_duration, TierName!="Donar" & TierName!="Franz" & TierName!="Gaby" & TierName!="Joanna" & TierName!="Venus")
+wildschwein_WSS_all_duration <- subset(wildschwein_WSS_all_duration, TierName!="Donar" & TierName!="Franz" & TierName!="Gaby" & TierName!="Joanna" & TierName!="Venus")
 
-plot$Period <- factor(plot$Period,ordered = T,levels = c("nachher","während","vorher"))
+wildschwein_WSS_all_duration$Period <- factor(wildschwein_WSS_all_duration$Period,ordered = T,levels = c("vorher","während","nachher"))
 
-plot %>%
+wildschwein_WSS_all_duration %>%
   group_by(TierName, Period, geht_rein) %>%
   summarise(avg_stay = mean(dauer)) %>%
   ggplot()+
   geom_col(aes(TierName, avg_stay, fill=Period))+
   scale_fill_manual(values = c("#FFDB6D", "#C4961A", "#C3D7A4"))+
-  labs(x = "", y="Stunden", fill = "")+
-  coord_flip()+
-  theme_minimal()
+  labs(title = "Aufenhaltsdauer der Tiere in Stunden", x = "", y = "", fill = "") +
+  theme(legend.position = "bottom",
+        title = element_text(size = 10))
 
 ```
 
@@ -1261,20 +1307,22 @@ Beim Test auf Unterschiede in den Mittelwerten durch ANOVA konnte bei drei von f
 
 Bei der statistischen Auswertung über alle Schrecks hingegen konnte kein signifikanter Unterschied in der Aufenthaltsdauer der Wildschweine in den unterschiedlichen Perioden nachgewiesen werden.
 
-```{r, echo=FALSE, fig.height=2, fig.width=2}
+```{r, echo=FALSE, fig.align='center', out.width="500px"}
 
-knitr::include_graphics("Statistische_Auswertung.jpg")
+knitr::include_graphics("Statistische_Auswertung_mit.jpg")
+
 ```
-
 
 #### Effekt einzelner Wildschweinschrecke
 
-Der WSS_2015_03 benötigte aufgrund Verletzung der Varianzhomogenität (ein Boxplot war viel grösser als die anderen beiden) eine Transformation. Trotz nicht vorhandener Normalverteilung konnte schliesslich bei der ANOVA ein hochsignifikanter Unterschied der Aufenthaltsdauer in den einzelnen Perioden festgestellt werden (F = 11.28, p < 0.0001). Der anschliessende Post-hoc-Test (Tukey) unterstützte, dass die Wildschweine sich bei diesem WSS vorher signifikant länger aufhielten als in der Zeit während und nachher (p < 0.0001). Zwischen den Perioden während und nachher konnte hingegen kein Unterschied festgestellt werden.
+**WSS_2015_03: Effekt nachweisbar**
 
-```{r, echo=FALSE, results='markup', fig.height=8, fig.width=5}
+Der WSS_2015_03 benötigte aufgrund Verletzung der Varianzhomogenität (ein Boxplot war viel grösser als die anderen beiden) eine Transformation. Trotz nicht vorhandener Normalverteilung konnte schliesslich bei der ANOVA ein hochsignifikanter Unterschied der Aufenthaltsdauer in den einzelnen Perioden festgestellt werden (F = 11.28, p < 0.0001). Der anschliessende Post-hoc-Test (Tukey) unterstützte, dass die Wildschweine sich bei diesem WSS vorher signifikant länger aufhielten als während und nachher (p < 0.0001). Zwischen den Perioden während und nachher konnte hingegen kein Unterschied festgestellt werden.
+
+```{r, echo=FALSE, fig.align='center', fig.height=6, fig.width=6}
 
 # WSS_2015_03
-buffer2n <- ggplot()+
+buf1 <- ggplot()+
   geom_sf(WSS_2015_03_buffer, mapping = aes())+
   geom_sf(WSS_2015_03_besendert_buffer, mapping = aes(alpha = 0.3))+
   geom_sf(schreck %>% filter(id == "WSS_2015_03"), mapping = aes())+
@@ -1290,34 +1338,33 @@ buffer2n <- ggplot()+
   facet_wrap(~Period)
 
 # Boxplot WSS_2015_03 nach Logarithmus-Transformation --> signifikant
-box2 <- ggplot2::ggplot(wildschwein_WSS_2015_03_duration, aes(x = Period, y= dauer)) +
+box1 <- ggplot2::ggplot(wildschwein_WSS_2015_03_duration, aes(x = Period, y= dauer)) +
   geom_boxplot(fill = "white", color = "black", size = 1) +
   scale_y_log10() +
   labs(x="", y="log10-Transformation")
 
-(buffer2n / box2)+
-  plot_annotation("WSS_2015_03 - Effekt nachweisbar")
-
-summary.lm(aov(log10(wildschwein_WSS_2015_03_duration$dauer)~wildschwein_WSS_2015_03_duration$Period))
-
-tuk2 <- TukeyHSD(aov(log10(wildschwein_WSS_2015_03_duration$dauer)~wildschwein_WSS_2015_03_duration$Period))
+(buf1 / box1) +
+  plot_annotation("WSS_2015_03") &
+  theme(plot.tag = element_text(size = 9))
 
 ```
 
 
+**WSS_2015_01: Kein Effekt nachweisbar**
+
 Bei der explorativen Datenanalyse für WSS_2015_01 stellten wir fest, dass dieser stark von Ausreissern geprägt ist, jedoch auf eine rechtsschiefe Verteilung hinwies. Nach Transformation der Daten waren die Voraussetzungen für eine ANOVA erfüllt. Beim Test auf Unterschiede in den Mittelwerten der Aufenthaltsdauer konnte jedoch kein signifikanter Unterschied vor, während und nach dem Abspielen des WSS festgestellt werden (F = 2.765, p = 0.0642).
 
-```{r, echo=FALSE, results='markup', fig.height=8, fig.width=5}
+```{r, echo=FALSE,  fig.align='center', fig.height=6, fig.width=6}
 
 # WSS_2015_01
-buffer1n <- ggplot()+
-  geom_sf(WSS_2015_01_buffer, mapping = aes())+
-  geom_sf(WSS_2015_01_besendert_buffer, mapping = aes(alpha = 0.3))+
-  geom_sf(schreck %>% filter(id == "WSS_2015_01"), mapping = aes())+
-  coord_sf(datum=2056)+
+buf2 <- ggplot() +
+  geom_sf(WSS_2015_01_buffer, mapping = aes()) +
+  geom_sf(WSS_2015_01_besendert_buffer, mapping = aes(alpha = 0.3)) +
+  geom_sf(schreck %>% filter(id == "WSS_2015_01"), mapping = aes()) +
+  coord_sf(datum=2056) +
   labs(title="",
-       color = "")+
-  guides(alpha = "none")+
+       color = "") +
+  guides(alpha = "none") +
   theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.y=element_blank(),
@@ -1326,41 +1373,41 @@ buffer1n <- ggplot()+
   facet_wrap(~Period)
 
 # Boxplot WSS_2015_01 nach Logarithmus-Transformation --> nicht signifikant
-box1 <- ggplot(wildschwein_WSS_2015_01_duration, aes(x = Period, y= dauer)) +
+box2 <- ggplot(wildschwein_WSS_2015_01_duration, aes(x = Period, y= dauer)) +
   geom_boxplot(fill = "white", color = "black", size = 1) +
   scale_y_log10() +
   labs(x="", y="log10-Transformation")
 
-(buffer1n / box1)+
-    plot_annotation("WSS_2015_01 - Kein Effekt nachweisbar")
-
-summary.lm(aov(log10(wildschwein_WSS_2015_01_duration$dauer)~wildschwein_WSS_2015_01_duration$Period))
+(buf2 / box2) +
+  plot_annotation("WSS_2015_01") &
+  theme(plot.tag = element_text(size = 9))
 
 ```
-
 
 #### Effekt auf einzelne Individuen
 
 Bei einem von sieben Wildschweinen konnte eine signifikante Abnahme der Aufenthaltsdauer nachgewiesen werden, währenddem der WSS abgespielt wurde (Ruth). Bei einem von sieben Wildschweinen konnte ein signifikanter Unterschied in der Aufenthaltsdauer zwischen den unterschiedlichen Perioden festgestellt werden. Der Post-hoc-Test dazu lieferte jedoch keine signifikanten Unterschiede zwischen den einzelnen Perioden (Frida). Bei einem Wildschwein konnte eine signifikante Zunahme in der Aufenthaltsdauer festgestellt werden, nachdem der WSS nicht mehr abgespielt wurde (Miriam). Bei zwei Wildschweinen konnte kein Unterschied festgestellt werden (Caroline, Olga). Zwei Wildschweine wurden von der statistischen Analyse ausgeschlossen, weil die Voraussetzungen zur Durchführung einer ANOVA nicht erfüllt waren (Sabine, Ueli).
 
+**Ruth bei WSS_2015_03: Effekt nachweisbar**
+
 Das Individuum Ruth zeigte eine ungleiche Verteilung, nach Transformation konnten jedoch Unterschiede in der Aufenthaltsdauer festgestellt werden. sie hat sich hoch signifikant unterschiedlich lange in der Nähe des WSS aufgehalten während der unterschiedlichen Perioden (F = 10.33, p = < 0.0001). Auch der Post-hoc-Test (Tukey) zeigte, dass sie sich vor Abspielen des WSS signifikant länger in der Nähe aufgehalten als währenddem und nachdem er abgespielt wurde (p < 0.0001). Zwischen den Perioden während und nachher konnte kein Unterschied festgestellt werden.
 
-```{r, echo = FALSE, results='markup', fig.height=8, fig.width=5}
+```{r, echo = FALSE,  fig.align='center', fig.height=6, fig.width=6}
 
 # Wildschwein Ruth --> signifikant
 
 # Buffer Ruth
-buffer_ruth <- ggplot()+
-  geom_sf(WSS_2015_03_buffer, mapping = aes())+
+buf3 <- ggplot() +
+  geom_sf(WSS_2015_03_buffer, mapping = aes()) +
   geom_sf(WSS_2015_03_besendert_buffer %>%
             filter(TierName == "Ruth"),
-          mapping = aes(alpha = 0.3))+
+          mapping = aes(alpha = 0.3)) +
   geom_sf(schreck %>%
             filter(id == "WSS_2015_03"),
           mapping = aes())+
-  coord_sf(datum=2056)+
+  coord_sf(datum=2056) +
   labs(title="",
-       color = "")+
+       color = "") +
    theme(legend.position="none",
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
@@ -1370,39 +1417,38 @@ buffer_ruth <- ggplot()+
   facet_wrap(~Period)
 
 # Boxplot nach Logarithmus-Transformation
-box_ruth <- ggplot(Ruth_duration, aes(x = Period, y= dauer)) +
+box3 <- ggplot(Ruth_duration, aes(x = Period, y= dauer)) +
   geom_boxplot(fill = "white", color = "black", size = 1) +
   scale_y_log10() +
   labs(x="", y="log10-Transformation")
 
-(buffer_ruth / box_ruth)+
-    plot_annotation("Ruth bei WSS_2015_03 - Effekt nachweisbar")
-
-summary.lm(aov(log10(Ruth_duration$dauer)~Ruth_duration$Period))
-
-TukeyHSD(aov(log10(Ruth_duration$dauer)~Ruth_duration$Period))
+(buf3 / box3) + 
+  plot_annotation("Ruth, WSS_2015_03") &
+  theme(plot.tag = element_text(size = 9))
 
 ```
 
 
+**Caroline bei WSS_2015_01: Kein Effekt nachweisbar**
+
 Das Wildschwein Caroline wies eine rechtsschiefe Verteilung auf und wurde mittels Logarithmus transformiert. Die ANOVA zeigte keinen signifikanten Unterschied (F = 1.362, p = 0.259).
 
-```{r, echo = FALSE, results='markup', fig.height=8, fig.width=5}
+```{r, echo = FALSE,  fig.align='center', fig.height=6, fig.width=6}
 
 # Wildschwein Caroline --> nicht signifikant
 
 # Buffer Caro
-buffer_caro <- ggplot()+
-  geom_sf(WSS_2015_01_buffer, mapping = aes())+
+buf4 <- ggplot() +
+  geom_sf(WSS_2015_01_buffer, mapping = aes()) +
   geom_sf(WSS_2015_01_besendert_buffer %>%
             filter(TierName == "Caroline"),
           mapping = aes(alpha = 0.3))+
   geom_sf(schreck %>%
             filter(id == "WSS_2015_01"),
-          mapping = aes())+
-  coord_sf(datum=2056)+
+          mapping = aes()) +
+  coord_sf(datum=2056) +
   labs(title="",
-       color = "")+
+       color = "") +
   theme(legend.position="none",
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
@@ -1412,23 +1458,20 @@ buffer_caro <- ggplot()+
   facet_wrap(~Period)
 
 # Boxplot nach Logarithmus-Transformation 
-box_caro <- ggplot2::ggplot(Caroline_duration, aes(x = Period, y= dauer)) +
+box4 <- ggplot2::ggplot(Caroline_duration, aes(x = Period, y= dauer)) +
   geom_boxplot(fill = "white", color = "black", size = 1) +
   scale_y_log10() +
   labs(x="", y="Log10-Transformation")
 
-(buffer_caro / box_caro)+
-    plot_annotation("Caroline bei WSS_2015_01 - Kein Effekt nachweisbar")
-
-summary.lm(aov(log10(Caroline_duration$dauer)~Caroline_duration$Period))
+(buf4 / box4) +
+  plot_annotation("Caroline, WSS_2015_01") &
+  theme(plot.tag = element_text(size = 9))
 
 ```
 
-
-
 ## Diskussion
 
-Es fällt auf, dass bei zwei von drei WSS mit signifikanter Abnahme der Aufenthaltsdauer während und nach dem Abspielen fast ausschliesslich Ruth aufgezeichnet wurde. Das Bild zeigt für WSS_2015_03, WSS_2015_04 und das Wildschwein Ruth genau das gleiche Muster über die drei Perioden. Deshalb ist davon auszugehen, dass die Wildschweine unterschiedlich auf den Schreck reagieren. So gibt es im Gegensatz zu Ruth, auch besonders freche Individuen, wie zum Beispiel Caroline, die sich nicht vom WSS beeinflussen lassen. Dieser Rückschluss deckt sich auch mit der Einschätzung von Sutter et al. im Abschlussbericht des ZHAW-Forschungsprojekts. 
+Es fällt auf, dass bei zwei von drei WSS mit signifikanter Abnahme der Aufenthaltsdauer während und nach dem Abspielen fast ausschliesslich Ruth aufgezeichnet wurde. Das Bild zeigt für WSS_2015_03, WSS_2015_04 und das Wildschwein Ruth genau das gleiche Muster über die drei Perioden. Deshalb ist davon auszugehen, dass die Wildschweine unterschiedlich auf den Schreck reagieren. So gibt es im Gegensatz zu Ruth, auch besonders freche Individuen, wie zum Beispiel Caroline, die sich nicht vom WSS beeinflussen lassen. Dieser Rückschluss deckt sich auch mit der Einschätzung von Sutter et al. im Abschlussbericht des ZHAW-Forschungsprojekts.
 
 Des Weiteren wurden die WSS wurden in unterschiedlichen Modi abgespielt, was auf das Verhalten der Wildschweine ebenfalls einen Einfluss haben kann. Auf den ersten Blick ist dies bei unserer Analyse allerdings nicht ersichtlich. Bei den WSS, bei denen die Aufenthaltsdauer beim Abspielen zugenommen hat, sind die Modi standard v1, standard v3 und agressiv v2 abgespielt worden (WSS_2015_03, WSS_2015_04, WSS_2016_01). Beim Schreck ohne Nachweis standard v1 und agressiv v2 (WSS_2015_01). Um dazu eine Aussage zu machen, müssten die Daten spezifisch auf diese Ausprägung untersucht werden. Ausserdem bräuchte es dazu vermutlich mehr Stichproben.
 
@@ -1436,11 +1479,10 @@ Allenfalls könnte auch der Wachstumsstand der einzelnen Kulturen einen Einfluss
 
 In einem weiteren Schritt wäre zu untersuchen ob die gewonnenen Erkenntnisse Rückschlüsse auf eine etwaige Gewöhnung des Schwarzwildes an den Wildschweinschreck zulassen.
 
-
 ## Quellen
 
 Morelle, K.; Podgórski, T.; Prévot, C.; Keuling, O.; Lehaire, F. (2015): Towards understanding wild boar Sus scrofa movement - a synthetic movement ecology approach. A review of wild boar Sus scrofa movement ecology. Mammal Review, Band 45, Nr. 1, S. 15--29. <doi:10.1111/mam.12028>
 
 Suter, S.; Stoller, S.; Sigrist, B. (2018): [Prävention von Wildschweinschäden & Wildschweinmanagement in Schutzgebieten - Schlussbericht](https://www.zhaw.ch/storage/hochschule/medien/bildmaterial/Schlussbericht_Wildschweinschreck.pdf). Zürcher Hochschule für Angewandte Wissenschaften ZHAW, Forschungsgruppe Wildtiermanagement WILMA. (letzter Zugriff: 19.06.2022)
 
-WLS.ch (2022): WildLife Solutions Webseite - [Produktblatt Wildschweinschreck] (https://www.yumpu.com/de/document/read/21100521/mehr-informationen-zum-wildschweinschreck-pdf-wlsch-shop). (letzter Zugriff: 23.06.2022)
+WLS.ch (2022): WildLife Solutions Webseite - [Produktblatt Wildschweinschreck] (<https://www.yumpu.com/de/document/read/21100521/mehr-informationen-zum-wildschweinschreck-pdf-wlsch-shop>). (letzter Zugriff: 23.06.2022)
